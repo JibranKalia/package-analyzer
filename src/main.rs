@@ -1,4 +1,4 @@
-use clap::{Parser, command};
+use clap::{command, Parser};
 
 #[derive(Parser)]
 #[command(version)]
@@ -11,11 +11,9 @@ struct Cli {
     /// The path to the file to read
     #[arg(long)]
     path: std::path::PathBuf,
-} 
-
+}
 
 fn main() {
-  let args = Cli::parse();
-  print!("Pattern: {}, Path: {}", args.pattern, args.path.display());
-
+    let args = Cli::parse();
+    print!("Pattern: {}, Path: {}", args.pattern, args.path.display());
 }
