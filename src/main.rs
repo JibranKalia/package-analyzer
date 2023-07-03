@@ -6,6 +6,8 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
+// git ls-files | grep "package.json$" | xargs cargo run -- --base /Users/jibrank/ziprecruiter/work/zip1 --paths
+
 #[derive(Parser)]
 #[command(version)]
 #[command(about = "Compares package.json in monorepo against the base and identifies any discrepancies", long_about = None)]
@@ -112,8 +114,7 @@ fn main() {
 
     let base_path = args.base;
 
-    let root_package: &std::path::PathBuf = &base_path.join("package.json");
-    let root_package_path = root_package.as_path();
+    let root_package = base_path.join("package.json");
 
     let to_check: Vec<PathBuf> = args
         .paths
@@ -121,12 +122,12 @@ fn main() {
         .map(|path_buf| base_path.join(path_buf).clone())
         .collect();
 
-    let root_deps = match read_file(root_package_path) {
+    let root_deps = match read_file(root_package.as_path()) {
         Some(deps) => deps,
         None => {
             eprintln!(
                 "Failed to parse the root package.json on this path: {}",
-                root_package_path.display()
+                root_package.display()
             );
             std::process::exit(1);
         }
