@@ -22,7 +22,7 @@ struct Cli {
 
 #[derive(Debug, Deserialize)]
 struct PackageJson {
-    dependencies: HashMap<String, String>,
+    dependencies: PackageDependencies,
 }
 
 type PackageDependencies = HashMap<String, String>;
@@ -81,7 +81,7 @@ fn strip_caret(version: &str) -> String {
     }
 }
 
-fn find_child_package_json(
+fn process_each_package_json(
     package_path: &Path,
     base_path: &Path,
     root_details: &PackageDependencies,
@@ -135,7 +135,7 @@ fn main() {
     };
 
     for path in to_check {
-        match find_child_package_json(path.as_path(), &base_path, &root_deps) {
+        match process_each_package_json(path.as_path(), &base_path, &root_deps) {
             Some(message) => {
                 println!("{}", message);
             }
