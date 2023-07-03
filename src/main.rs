@@ -22,7 +22,6 @@ struct PackageJson {
 
 type PackageDependencies = HashMap<String, String>;
 
-
 fn parse_package_json(file_content: &str) -> Result<PackageJson> {
     let json_value: PackageJson = serde_json::from_str(file_content)?;
     Ok(json_value)
@@ -35,34 +34,56 @@ fn read_file(file_path: &Path) -> Option<PackageDependencies> {
     Some(deps)
 }
 
-fn compare_dependencies(root: &PackageDependencies, current: &PackageDependencies) -> Option<String> {
+struct Mismatch {
+    key: String,
+    root_value: String,
+    current_value: String,
+}
+
+fn compare_dependencies(
+    root: &PackageDependencies,
+    current: &PackageDependencies,
+) -> Option<Mismatch> {
     for (key, value) in current {
-        if root.get(key) != Some(value) {
-          return Some(key.clone());
+        match root.get(key) {
+            Some(val) => if val != value {
+                    return Some(Mismatch {
+                        key: key.clone(),
+                        root_value: val.clone(),
+                        current_value: value.clone(),
+                    });
+                },
+            None => ()
         }
     }
     None
 }
 
-
-fn find_child_package_json(path: &Path, root: &PackageDependencies) -> Option<String>{
+fn find_child_package_json(path: &Path, root: &PackageDependencies) -> Option<String> {
     let root_dir = path.parent().unwrap();
     for entry in WalkDir::new(root_dir) {
         let entry = entry.unwrap();
-        if entry.file_type().is_file() && entry.file_name().to_str() == Some("package.json") {
-            println!("Checking {}", entry.path().display());
+        // ensure package.json is not in node_modules
+        return if !entry.file_type().is_file() && entry.file_name().to_str() == Some("node_modules") {
+            None
+        } else
+        if entry.file_type().is_file() && entry.file_name().to_str() == Some("package.json") && entry.file_name().to_str() != Some("node_modules") {
+            println!("Checking file {}", entry.path().display());
             let current_deps = read_file(entry.path()).unwrap();
             match compare_dependencies(&root, &current_deps) {
-              Some(mismatch) => println!("Mismatch: {}", mismatch),
-              None => println!("No mismatch"),
+                Some(mismatch) => {
+                    let result = format!(
+                        "Expected: {} but found: {} in {}",
+                        mismatch.root_value, mismatch.current_value, mismatch.key
+                    );
+                    return Some(result);
+                }
+                None => (),
             }
-            return Some("test".to_string());
         }
     }
     None
-
 }
-
 
 fn main() {
     let args = Cli::parse();
@@ -73,10 +94,19 @@ fn main() {
     let root_deps = match read_file(path) {
         Some(deps) => deps,
         None => {
-            eprintln!("Failed to parse the root package.json on this path: {}", path.display());
+            eprintln!(
+                "Failed to parse the root package.json on this path: {}",
+                path.display()
+            );
             std::process::exit(1);
         }
     };
 
-    find_child_package_json(path, &root_deps);
+    match find_child_package_json(path, &root_deps) {
+        Some(message) => {
+            println!("Mismatch: {}", message);
+            std::process::exit(1);
+        }
+        None => println!("No mismatch"),
+    }
 }
