@@ -8,16 +8,15 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(version)]
-#[command(about = "Does awesome things", long_about = None)]
+#[command(about = "Compares package.json in monorepo against the base and identifies any discrepancies", long_about = None)]
 struct Cli {
+    /// Absolute path to the base directory
     #[arg(long, short)]
     base: std::path::PathBuf,
 
+    /// Relative paths to the package.json files to check
     #[arg(long, short, num_args = 1..)]
     paths: Vec<std::path::PathBuf>,
-
-    #[arg(long, short)]
-    test: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,6 +31,14 @@ fn parse_package_json(file_content: &str) -> Result<PackageJson> {
     Ok(json_value)
 }
 
+
+fn strip_caret(version: &str) -> &str {
+    match version.strip_prefix("^") {
+        Some(stripped) => stripped,
+        None => version,
+    }
+}
+
 fn read_file(file_path: &Path) -> Option<PackageDependencies> {
     let file_content = fs::read_to_string(file_path).ok()?;
     let json_value = parse_package_json(&file_content).ok()?;
@@ -39,7 +46,7 @@ fn read_file(file_path: &Path) -> Option<PackageDependencies> {
     let processed_deps: HashMap<String, String> = json_value
         .dependencies
         .into_iter()
-        .map(|(name, version)| (name, strip_caret(&version)))
+        .map(|(name, version)| (name, strip_caret(&version).to_string()))
         .collect();
 
     Some(processed_deps)
@@ -74,13 +81,6 @@ fn compare_dependencies(
     mismatches
 }
 
-fn strip_caret(version: &str) -> String {
-    match version.strip_prefix("^") {
-        Some(stripped) => stripped.to_string(),
-        None => version.to_string(),
-    }
-}
-
 fn process_each_package_json(
     package_path: &Path,
     base_path: &Path,
@@ -90,7 +90,7 @@ fn process_each_package_json(
     let mismatches = compare_dependencies(&root_details, &current_deps);
 
     if !mismatches.is_empty() {
-        let result = mismatches
+        let result: Vec<String> = mismatches
             .iter()
             .map(|mismatch| {
                 let path_to_display = package_path.strip_prefix(base_path).unwrap().display();
@@ -99,7 +99,7 @@ fn process_each_package_json(
                     mismatch.key, path_to_display, mismatch.root_value, mismatch.current_value
                 )
             })
-            .collect::<Vec<_>>();
+            .collect();
 
         Some(result.join("\n"))
     } else {
