@@ -4,8 +4,8 @@ use serde_json::Result;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-// use walkdir;
-// use walkdir::WalkDir;
+use walkdir;
+use walkdir::WalkDir;
 
 #[derive(Parser)]
 #[command(version)]
@@ -21,9 +21,6 @@ struct PackageJson {
 }
 
 type PackageDependencies = HashMap<String, String>;
-type ParseResult<T> = std::result::Result<T, DoubleError>;
-#[derive(Debug, Clone)]
-struct DoubleError;
 
 
 fn parse_package_json(file_content: &str) -> Result<PackageJson> {
@@ -38,14 +35,34 @@ fn read_file(file_path: &Path) -> Option<PackageDependencies> {
     Some(deps)
 }
 
-// fn compare_dependencies(root: &PackageDependencies, current: &PackageDependencies) -> bool {
-//     for (key, value) in current {
-//         if root.get(key) != Some(value) {
-//             return false;
-//         }
-//     }
-//     true
-// }
+fn compare_dependencies(root: &PackageDependencies, current: &PackageDependencies) -> Option<String> {
+    for (key, value) in current {
+        if root.get(key) != Some(value) {
+          return Some(key.clone());
+        }
+    }
+    None
+}
+
+
+fn find_child_package_json(path: &Path, root: &PackageDependencies) -> Option<String>{
+    let root_dir = path.parent().unwrap();
+    for entry in WalkDir::new(root_dir) {
+        let entry = entry.unwrap();
+        if entry.file_type().is_file() && entry.file_name().to_str() == Some("package.json") {
+            println!("Checking {}", entry.path().display());
+            let current_deps = read_file(entry.path()).unwrap();
+            match compare_dependencies(&root, &current_deps) {
+              Some(mismatch) => println!("Mismatch: {}", mismatch),
+              None => println!("No mismatch"),
+            }
+            return Some("test".to_string());
+        }
+    }
+    None
+
+}
+
 
 fn main() {
     let args = Cli::parse();
@@ -53,40 +70,13 @@ fn main() {
     let root_package_json = args.path.clone();
     let path = Path::new(&root_package_json);
 
-    let _root_deps = match read_file(path) {
-        Some(deps) => Some(deps),
+    let root_deps = match read_file(path) {
+        Some(deps) => deps,
         None => {
             eprintln!("Failed to parse the root package.json on this path: {}", path.display());
             std::process::exit(1);
         }
     };
+
+    find_child_package_json(path, &root_deps);
 }
-
-// for entry in WalkDir::new("root") {
-//     let entry = entry.unwrap();
-//     if entry.file_type().is_file() && entry.file_name().to_str() == Some("package.json") {
-//         let current_deps = read_package_json(entry.path().to_str().unwrap()).unwrap();
-//         if !compare_dependencies(&root_deps, &current_deps) {
-//             println!(
-//                 "Alert! Different versions of packages found in {}",
-//                 entry.path().display()
-//             );
-//         }
-//     }
-// }
-
-// fn main() {
-//     let content = std::fs::read_to_string(&args.path).expect("could not read file");
-
-//     // print!("Pattern: {}, Path: {}", args.pattern, args.path.display());
-
-//     // let f = File::open(&args.path).unwrap();
-//     // let reader = BufReader::new(f);
-
-//     for line in content.lines() {
-//       // let line = line_result.unwrap();
-//       if line.contains(&args.pattern) {
-//           println!("Found match: {}", line);
-//       }
-//     }
-// }
