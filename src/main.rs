@@ -121,8 +121,6 @@ fn main() {
         .map(|path_buf| base_path.join(path_buf).clone())
         .collect();
 
-    println!("Here are the paths to check: {:?}", to_check);
-
     let root_deps = match read_file(root_package_path) {
         Some(deps) => deps,
         None => {
