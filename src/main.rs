@@ -35,8 +35,14 @@ fn parse_package_json(file_content: &str) -> Result<PackageJson> {
 fn read_file(file_path: &Path) -> Option<PackageDependencies> {
     let file_content = fs::read_to_string(file_path).ok()?;
     let json_value = parse_package_json(&file_content).ok()?;
-    let deps = json_value.dependencies.clone();
-    Some(deps)
+
+    let processed_deps: HashMap<String, String> = json_value
+        .dependencies
+        .into_iter()
+        .map(|(name, version)| (name, strip_caret(&version)))
+        .collect();
+
+    Some(processed_deps)
 }
 
 struct Mismatch {
@@ -68,7 +74,18 @@ fn compare_dependencies(
     mismatches
 }
 
-fn find_child_package_json(package_path: &Path, base_path: &Path, root_details: &PackageDependencies) -> Option<String> {
+fn strip_caret(version: &str) -> String {
+    match version.strip_prefix("^") {
+        Some(stripped) => stripped.to_string(),
+        None => version.to_string(),
+    }
+}
+
+fn find_child_package_json(
+    package_path: &Path,
+    base_path: &Path,
+    root_details: &PackageDependencies,
+) -> Option<String> {
     let current_deps = read_file(package_path)?;
     let mismatches = compare_dependencies(&root_details, &current_deps);
 
@@ -76,7 +93,6 @@ fn find_child_package_json(package_path: &Path, base_path: &Path, root_details: 
         let result = mismatches
             .iter()
             .map(|mismatch| {
-
                 let path_to_display = package_path.strip_prefix(base_path).unwrap().display();
                 format!(
                     "Error in `{}` for package: {}. Expected: {} but got: {}",
