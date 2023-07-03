@@ -68,17 +68,19 @@ fn compare_dependencies(
     mismatches
 }
 
-fn find_child_package_json(path: &Path, root_details: &PackageDependencies) -> Option<String> {
-    let current_deps = read_file(path)?;
+fn find_child_package_json(package_path: &Path, base_path: &Path, root_details: &PackageDependencies) -> Option<String> {
+    let current_deps = read_file(package_path)?;
     let mismatches = compare_dependencies(&root_details, &current_deps);
 
     if !mismatches.is_empty() {
         let result = mismatches
             .iter()
             .map(|mismatch| {
+
+                let path_to_display = package_path.strip_prefix(base_path).unwrap().display();
                 format!(
-                    "Expected: {} but found: {} in {}",
-                    mismatch.root_value, mismatch.current_value, mismatch.key
+                    "Error in `{}` for package: {}. Expected: {} but got: {}",
+                    mismatch.key, path_to_display, mismatch.root_value, mismatch.current_value
                 )
             })
             .collect::<Vec<_>>();
@@ -117,10 +119,9 @@ fn main() {
     };
 
     for path in to_check {
-        match find_child_package_json(path.as_path(), &root_deps) {
+        match find_child_package_json(path.as_path(), &base_path, &root_deps) {
             Some(message) => {
                 println!("{}", message);
-                // std::process::exit(1);
             }
             None => (),
         }
