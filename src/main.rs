@@ -1,10 +1,9 @@
 use clap::{command, Parser};
 use serde::Deserialize;
-use serde_json::Result;
-use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
+use std::result::Result;
 
 // cd <monorepo_path> && git ls-files | grep "package.json$" > paths.txt
 // cat paths.txt | xargs cargo run -- --base <monorepo_path> --paths
@@ -24,35 +23,51 @@ struct Cli {
 
 #[derive(Debug, Deserialize)]
 struct PackageJson {
-    dependencies: PackageDependencies,
+    dependencies: Vec<PackageDependencies>,
 }
 
-type PackageDependencies = HashMap<String, String>;
-
-fn parse_package_json(file_content: &str) -> Result<PackageJson> {
-    let json_value: PackageJson = serde_json::from_str(file_content)?;
-    Ok(json_value)
-}
-
-
-fn strip_caret(version: &str) -> &str {
-    match version.strip_prefix("^") {
-        Some(stripped) => stripped,
-        None => version,
+impl PackageJson {
+    fn parse_package_json(file_content: &str) -> Result<Self, anyhow::Error> {
+        let json_value: PackageJson = serde_json::from_str(file_content)?;
+        Ok(json_value)
     }
 }
 
-fn read_file(file_path: &Path) -> Option<PackageDependencies> {
+#[derive(Debug, Clone, Deserialize)]
+struct PackageDependencies {
+    name: String,
+    version: String,
+}
+
+impl PackageDependencies {
+    fn strip_caret(&self) -> Self {
+        match self.version.strip_prefix("^") {
+            Some(stripped) => Self {
+                name: self.name.clone(),
+                version: stripped.to_string(),
+            },
+            None => self.clone(),
+        }
+    }
+}
+
+fn read_file(file_path: &Path) -> Option<PackageJson> {
     let file_content = fs::read_to_string(file_path).ok()?;
-    let json_value = parse_package_json(&file_content).ok()?;
+    let json_value = match PackageJson::parse_package_json(&file_content) {
+        Ok(value) => value,
+        Err(_) => {
+            panic!(
+                "Failed to parse the package.json on this path: {}",
+                file_path.display()
+            );
+        }
+    };
 
-    let processed_deps: HashMap<String, String> = json_value
-        .dependencies
-        .into_iter()
-        .map(|(name, version)| (name, strip_caret(&version).to_string()))
-        .collect();
+    json_value.dependencies.iter().for_each(|p| {
+        p.strip_caret();
+    });
 
-    Some(processed_deps)
+    Some(json_value)
 }
 
 struct Mismatch {
