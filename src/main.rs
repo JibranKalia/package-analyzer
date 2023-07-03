@@ -49,12 +49,14 @@ struct Mismatch {
 fn compare_dependencies(
     root: &PackageDependencies,
     current: &PackageDependencies,
-) -> Option<Mismatch> {
+) -> Vec<Mismatch> {
+    let mut mismatches = Vec::new();
+
     for (key, value) in current {
         match root.get(key) {
             Some(val) => {
                 if val != value {
-                    return Some(Mismatch {
+                    mismatches.push(Mismatch {
                         key: key.clone(),
                         root_value: val.clone(),
                         current_value: value.clone(),
@@ -64,20 +66,27 @@ fn compare_dependencies(
             None => (),
         }
     }
-    None
+    mismatches
 }
 
 fn find_child_package_json(path: &Path, root_details: &PackageDependencies) -> Option<String> {
     let current_deps = read_file(path)?;
-    match compare_dependencies(&root_details, &current_deps) {
-        Some(mismatch) => {
-            let result = format!(
-                "Expected: {} but found: {} in {}",
-                mismatch.root_value, mismatch.current_value, mismatch.key
-            );
-            return Some(result);
-        }
-        None => None,
+    let mismatches = compare_dependencies(&root_details, &current_deps);
+
+    if !mismatches.is_empty() {
+        let result = mismatches
+            .iter()
+            .map(|mismatch| {
+                format!(
+                    "Expected: {} but found: {} in {}",
+                    mismatch.root_value, mismatch.current_value, mismatch.key
+                )
+            })
+            .collect::<Vec<_>>();
+
+        Some(result.join("\n"))
+    } else {
+        None
     }
 }
 
@@ -111,10 +120,10 @@ fn main() {
     for path in to_check {
         match find_child_package_json(path.as_path(), &root_deps) {
             Some(message) => {
-                println!("Mismatch: {}", message);
-                std::process::exit(1);
+                println!("{}", message);
+                // std::process::exit(1);
             }
-            None => println!("No mismatch in {}", path.display()),
+            None => (),
         }
     }
 }
