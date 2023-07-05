@@ -27,10 +27,19 @@ struct PackageJson {
 }
 
 impl PackageJson {
-    fn parse_package_json(file_content: &str) -> Result<Self, anyhow::Error> {
+    fn new(file_content: &str) -> Result<Self, anyhow::Error> {
         let json_value: PackageJson = serde_json::from_str(file_content)?;
         Ok(json_value)
     }
+
+    fn fix_dependencies(self) -> Self {
+        self.dependencies.iter().for_each(|dep| {
+            dep.strip_caret();
+        });
+
+        self
+    }
+
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -51,23 +60,12 @@ impl PackageDependencies {
     }
 }
 
-fn read_file(file_path: &Path) -> Option<PackageJson> {
-    let file_content = fs::read_to_string(file_path).ok()?;
-    let json_value = match PackageJson::parse_package_json(&file_content) {
-        Ok(value) => value,
-        Err(_) => {
-            panic!(
-                "Failed to parse the package.json on this path: {}",
-                file_path.display()
-            );
-        }
-    };
+fn read_file(file_path: &Path) -> Result<PackageJson, anyhow::Error> {
+    let file_content = fs::read_to_string(file_path)?;
+    let json_value = PackageJson::new(&file_content)?
+        .fix_dependencies();
 
-    json_value.dependencies.iter().for_each(|p| {
-        p.strip_caret();
-    });
-
-    Some(json_value)
+    Ok(json_value)
 }
 
 struct Mismatch {
@@ -105,7 +103,7 @@ fn process_each_package_json(
     root_details: &PackageDependencies,
 ) -> Option<String> {
     let current_deps = read_file(package_path)?;
-    let mismatches = compare_dependencies(&root_details, &current_deps);
+    let mismatches = compare_dependencies(root_details, current_deps);
 
     if !mismatches.is_empty() {
         let result: Vec<String> = mismatches
